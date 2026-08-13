@@ -1,0 +1,601 @@
+import { useState, useEffect, useMemo } from 'react';
+import { Product, InventoryItem } from '../types';
+import { Image as ImageIcon, Plus, Save, X, Search } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
+import { useToast } from '../context/ToastContext';
+import { useInventory } from '../context/InventoryContext';
+import { useAuth } from '../context/AuthContext';
+import { searchInventoryItems } from '../services/db';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { storage } from '../services/firebase';
+
+interface ProductFormProps {
+  onAdd: (product: Omit<Product, 'id'>) => void;
+  editingProduct?: Product;
+  onCancelEdit?: () => void;
+}
+
+export default function ProductForm({ onAdd, editingProduct, onCancelEdit }: ProductFormProps) {
+  const { showToast } = useToast();
+  const { isAdmin } = useAuth();
+  const [image, setImage] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [name, setName] = useState('');
+  const [brand, setBrand] = useState('');
+  const [category, setCategory] = useState('');
+  const [gender, setGender] = useState('');
+  const [priceBs, setPriceBs] = useState<number | ''>('');
+  const [units, setUnits] = useState<number | ''>('');
+  const [wholesalePrice, setWholesalePrice] = useState<number | ''>('');
+  const [sellingPrice, setSellingPrice] = useState<number | ''>('');
+  const [capacity, setCapacity] = useState('');
+  const [expirationDate, setExpirationDate] = useState('');
+  const [barcode, setBarcode] = useState('');
+  const [categoryType, setCategoryType] = useState('Skincare'); // Main category
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Autocomplete State
+  const { inventory } = useInventory();
+  const [showProductSearch, setShowProductSearch] = useState(false);
+
+  const { existingBrands, globalProducts } = useMemo(() => {
+    const items = inventory || [];
+    const uniqueProducts: InventoryItem[] = [];
+    const seen = new Set();
+
+    for (const item of items) {
+      if (!item.name) continue;
+      const key = `${item.name.toLowerCase()}-${(item.brand || '').toLowerCase()}-${(item.capacity || '').toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueProducts.push(item);
+      }
+    }
+
+    const brands = new Set(items.map(i => i.brand).filter(b => !!b) as string[]);
+    return {
+      existingBrands: Array.from(brands).sort(),
+      globalProducts: uniqueProducts
+    };
+  }, [inventory]);
+
+  const handleSelectExistingProduct = (p: InventoryItem) => {
+    setName(p.name);
+    setBrand(p.brand || '');
+    setCategory(p.category || '');
+    setGender(p.gender || '');
+    setCapacity(p.capacity || '');
+    setCategoryType(p.categoryType || 'Skincare');
+    setExpirationDate(p.expirationDate || '');
+    setBarcode(p.barcode || '');
+    setImage(p.image || '');
+    setPriceBs(p.priceBs || '');
+    setWholesalePrice(p.wholesalePrice || '');
+    setSellingPrice(p.sellingPrice || '');
+
+    // Reset search
+    setShowProductSearch(false);
+
+    // Auto focus the units field if possible, but user will naturally click it
+  };
+
+  useEffect(() => {
+    if (editingProduct) {
+      setImage(editingProduct.image || '');
+      setImageFile(null);
+      setName(editingProduct.name);
+      setBrand(editingProduct.brand || '');
+      setCategory(editingProduct.category || '');
+      setGender(editingProduct.gender || '');
+      setCapacity(editingProduct.capacity || '');
+      setCategoryType(editingProduct.categoryType || 'Skincare');
+      setExpirationDate(editingProduct.expirationDate || '');
+      setBarcode(editingProduct.barcode || '');
+      setPriceBs(editingProduct.priceBs);
+      setUnits(editingProduct.units);
+      setWholesalePrice(editingProduct.wholesalePrice);
+      setSellingPrice(editingProduct.sellingPrice);
+    } else {
+      resetForm();
+    }
+  }, [editingProduct]);
+
+  const resetForm = () => {
+    setImage('');
+    setImageFile(null);
+    setName('');
+    setBrand('');
+    setCategory('');
+    setGender('');
+    setCapacity('');
+    setCategoryType('Skincare');
+    setExpirationDate('');
+    setBarcode('');
+    setPriceBs('');
+    setUnits('');
+    setWholesalePrice('');
+    setSellingPrice('');
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || e.target.files?.length === 0) {
+      return;
+    }
+
+    if (file) {
+      try {
+        const options = {
+          maxSizeMB: 0.15, // max 150kb
+          maxWidthOrHeight: 600,
+          useWebWorker: true,
+          fileType: 'image/webp',
+        };
+        const compressedFile = await imageCompression(file, options);
+
+        setImageFile(compressedFile);
+        setImage(URL.createObjectURL(compressedFile));
+      } catch (error) {
+        console.error('Error compressing image:', error);
+        // Fallback to uncompressed if compression fails
+        setImageFile(file);
+        setImage(URL.createObjectURL(file));
+      }
+    }
+  };
+
+  useEffect(() => {
+    // Cleanup temporary URL object
+    return () => {
+      if (imageFile && image.startsWith('blob:')) {
+        URL.revokeObjectURL(image);
+      }
+    };
+  }, [imageFile, image]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!name) {
+      showToast('El nombre del producto es obligatorio', 'error');
+      return;
+    }
+    if (units === '') {
+      showToast('La cantidad de unidades es obligatoria', 'error');
+      return;
+    }
+
+    let finalPriceBs = priceBs;
+    let finalWholesalePrice = wholesalePrice;
+
+    if (categoryType === 'Perfumes') {
+      finalPriceBs = 0;
+      finalWholesalePrice = 0;
+    } else {
+      if (priceBs === '') {
+        showToast('El precio de compra es obligatorio', 'error');
+        return;
+      }
+      if (wholesalePrice === '') {
+        showToast('El precio por mayor es obligatorio', 'error');
+        return;
+      }
+    }
+
+    if (sellingPrice === '') {
+      showToast('El precio por unidad es obligatorio', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let finalImageUrl = image;
+
+      if (imageFile) {
+        // 1. Delete old image if it exists and is a Firebase Storage URL
+        if (editingProduct?.image && editingProduct.image.includes('firebasestorage.googleapis.com')) {
+          try {
+            const oldImageRef = ref(storage, editingProduct.image);
+            await deleteObject(oldImageRef);
+          } catch (err) {
+            console.warn('Could not delete old image from Storage', err);
+          }
+        }
+
+        // 2. Upload new image
+        const timestamp = Date.now();
+        const extension = imageFile.type.split('/')[1] || 'webp';
+        const storageRef = ref(storage, `products/${timestamp}.${extension}`);
+
+        await uploadBytes(storageRef, imageFile);
+        finalImageUrl = await getDownloadURL(storageRef);
+      }
+
+      const totalPrice = Number(finalPriceBs) * Number(units);
+
+      // We await onAdd here so if there's an error we don't clear the form
+      await onAdd({
+        name,
+        brand,
+        category,
+        gender: categoryType === 'Proteínas/Suplementos' || categoryType === 'Desodorantes' || categoryType === 'Otros' ? '' : gender,
+        capacity,
+        categoryType,
+        expirationDate,
+        barcode,
+        image: finalImageUrl,
+        priceBs: Number(finalPriceBs),
+        units: Number(units),
+        wholesalePrice: Number(finalWholesalePrice),
+        sellingPrice: Number(sellingPrice),
+        totalPrice,
+      });
+
+      if (!editingProduct) {
+        resetForm();
+      }
+    } catch (error: any) {
+      console.error('Error submitting form:', error);
+      showToast(error.message || 'Error inesperado al guardar el producto.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const currentTotal = priceBs !== '' && units !== ''
+    ? (Number(priceBs) * Number(units)).toFixed(2)
+    : '0.00';
+
+  const filteredProducts = globalProducts.slice(0, 5); // Limit to top 5 results
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white rounded-none md:rounded-2xl border-0 md:border border-gray-200 p-4 md:p-6 space-y-6 relative min-h-screen md:min-h-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-4">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          {editingProduct ? (
+            <>
+              <Save className="h-5 w-5 text-teal-600" />
+              Editar Producto
+            </>
+          ) : (
+            <>
+              <Plus className="h-5 w-5 text-teal-600" />
+              Agregar Nuevo Producto
+            </>
+          )}
+        </h2>
+        {onCancelEdit && (
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors absolute right-2 top-2 md:relative md:right-0 md:top-0"
+            title="Cerrar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {isAdmin && (
+          <>
+        {/* Imagen */}
+        <div className="col-span-1 md:col-span-2 lg:col-span-4 flex gap-4 items-start">
+          <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden shrink-0">
+            {image ? (
+              <img src={image} alt="Preview" className="w-full h-full object-cover" />
+            ) : (
+              <ImageIcon className="h-8 w-8 text-gray-400" />
+            )}
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del Producto</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+            />
+          </div>
+        </div>
+
+        {/* Categoría Principal */}
+        <div className="col-span-1 md:col-span-2 lg:col-span-4">
+          <label htmlFor="prod-category-type" className="block text-sm font-medium text-gray-700 mb-1">Categoría Principal del Producto</label>
+          <select
+            id="prod-category-type"
+            value={categoryType}
+            onChange={(e) => {
+              setCategoryType(e.target.value);
+              setGender(''); // reset gender when category type changes
+            }}
+            className="w-full px-3 py-2 border border-teal-200 bg-teal-50 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium text-teal-900"
+          >
+            <option value="Skincare">Skincare (Cuidado de Piel)</option>
+            <option value="Perfumes">Perfumes</option>
+            <option value="Proteínas/Suplementos">Proteínas y Suplementos</option>
+            <option value="Desodorantes">Desodorantes</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+
+          </>
+        )}
+
+        {/* Código de Barras */}
+        <div className={!isAdmin ? "col-span-1 md:col-span-2 lg:col-span-4" : "col-span-1"}>
+          <label htmlFor="prod-barcode" className="block text-sm font-medium text-gray-700 mb-1">Código (SKU/Balanza)</label>
+          <input
+            id="prod-barcode"
+            type="text"
+            value={barcode}
+            onChange={(e) => setBarcode(e.target.value)}
+            className="w-full px-3 py-2 border border-blue-100 bg-blue-50/50 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+            placeholder="Ej. CERA-100"
+          />
+        </div>
+
+        {isAdmin && (
+          <>
+        {/* Nombre, Marca, Categoría */}
+        <div className="col-span-1 md:col-span-1 lg:col-span-3 relative">
+          <label htmlFor="prod-name" className="block text-sm font-medium text-gray-700 mb-1">Nombre del Producto</label>
+          <input
+            id="prod-name"
+            type="text"
+            required
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (!editingProduct) setShowProductSearch(true);
+            }}
+            onFocus={() => { if (!editingProduct) setShowProductSearch(true); }}
+            onKeyDown={(e) => {
+              // Si el menú está abierto y presiona Enter, cerramos el menú sin seleccionar nada para evitar auto-relleno indeseado
+              if (e.key === 'Enter' && showProductSearch) {
+                setShowProductSearch(false);
+              }
+            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+            placeholder="Busca por nombre o código..."
+          />
+          {!editingProduct && showProductSearch && name && (
+            <>
+              <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-md overflow-hidden">
+                {filteredProducts.length > 0 ? (
+                  <ul className="max-h-60 overflow-y-auto">
+                    {filteredProducts.map(p => (
+                      <li
+                        key={p.id}
+                        onMouseDown={(e) => {
+                          // Usar onMouseDown y preventDefault evita que el input pierda foco prematuramente,
+                          // y asegura que el clic sea intencional antes de procesar otros eventos
+                          e.preventDefault();
+                          handleSelectExistingProduct(p);
+                        }}
+                        className="px-4 py-2 hover:bg-teal-50 cursor-pointer flex items-center gap-3 border-b border-gray-50 last:border-0"
+                      >
+                        {p.image ? (
+                          <img src={p.image} className="w-8 h-8 rounded object-cover" />
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                            <ImageIcon className="w-4 h-4 text-gray-400" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 line-clamp-1">{p.name}</p>
+                          <p className="text-xs text-gray-500">{p.brand || 'Sin marca'} {p.capacity ? `· ${p.capacity}` : ''}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="px-4 py-3 text-sm text-gray-500">No se encontraron productos similares.</div>
+                )}
+              </div>
+              <div className="fixed inset-0 z-40" onClick={() => setShowProductSearch(false)} />
+            </>
+          )}
+        </div>
+
+        <div className="col-span-1">
+          <label htmlFor="prod-brand" className="block text-sm font-medium text-gray-700 mb-1">Marca (Opcional)</label>
+          <input
+            id="prod-brand"
+            type="text"
+            list="brands-list"
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+            placeholder="Ej. CeraVe, The Ordinary, La Roche-Posay"
+          />
+          <datalist id="brands-list">
+            {existingBrands.map((b, idx) => (
+              <option key={idx} value={b} />
+            ))}
+          </datalist>
+        </div>
+
+        <div className="col-span-1">
+          <label htmlFor="prod-category" className="block text-sm font-medium text-gray-700 mb-1">Categoría (Opcional)</label>
+          <input
+            id="prod-category"
+            type="text"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+            placeholder="Ej. Suero, Crema Hidratante, Protector Solar, Limpiador"
+          />
+        </div>
+
+        {categoryType !== 'Proteínas/Suplementos' && categoryType !== 'Desodorantes' && categoryType !== 'Otros' && (
+          <div className="col-span-1">
+            <label htmlFor="prod-gender" className="block text-sm font-medium text-gray-700 mb-1">
+              {categoryType === 'Perfumes' ? 'Género' : 'Tipo de Piel'}
+            </label>
+            {categoryType === 'Perfumes' ? (
+              <select
+                id="prod-gender"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">Seleccionar...</option>
+                <option value="Mujer">Mujer</option>
+                <option value="Varón">Varón</option>
+                <option value="Unisex">Unisex</option>
+              </select>
+            ) : (
+              <>
+                <input
+                  id="prod-gender"
+                  type="text"
+                  list="skin-types"
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  placeholder="Ej. Piel Grasa..."
+                />
+                <datalist id="skin-types">
+                  <option value="Todo tipo de piel" />
+                  <option value="Piel Grasa" />
+                  <option value="Piel Seca" />
+                  <option value="Piel Mixta" />
+                  <option value="Piel Sensible" />
+                  <option value="Piel con manchas" />
+                </datalist>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className={`col-span-1 ${categoryType === 'Proteínas/Suplementos' || categoryType === 'Desodorantes' || categoryType === 'Otros' ? 'md:col-span-2' : ''}`}>
+          <label htmlFor="prod-capacity" className="block text-sm font-medium text-gray-700 mb-1">
+            {categoryType === 'Proteínas/Suplementos' ? 'Presentación / Tamaño' : 'Presentación (ml/g)'}
+          </label>
+          <input
+            id="prod-capacity"
+            type="text"
+            value={capacity}
+            onChange={(e) => setCapacity(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+            placeholder={categoryType === 'Proteínas/Suplementos' ? 'Ej. 5 lbs, 60 servicios' : 'Ej. 30ml, 50ml'}
+          />
+        </div>
+
+        <div className="col-span-1 md:col-span-2 lg:col-span-4">
+          <div className="w-full sm:w-1/4">
+            <label htmlFor="prod-expiration" className="block text-sm font-medium text-gray-700 mb-1">Vencimiento (Opcional)</label>
+            <input
+              id="prod-expiration"
+              type="date"
+              value={expirationDate}
+              onChange={(e) => setExpirationDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+            />
+          </div>
+        </div>
+
+          </>
+        )}
+        {isAdmin && (
+        <div className="col-span-1 md:col-span-2 lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 border-t border-gray-100 pt-4">
+          <div className="col-span-1">
+            <label htmlFor="prod-units" className="block text-sm font-medium text-gray-700 mb-1">Unidades</label>
+            <input
+              id="prod-units"
+              type="number"
+              min="1"
+              required
+              value={units}
+              onChange={(e) => setUnits(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+
+          {categoryType !== 'Perfumes' && (
+            <>
+              <div className="col-span-1">
+                <label htmlFor="prod-price-bs" className="block text-sm font-medium text-gray-700 mb-1">Precio Compra (Bs)</label>
+                <input
+                  id="prod-price-bs"
+                  type="number"
+                  step="0.01"
+                  required={categoryType !== 'Perfumes'}
+                  value={priceBs}
+                  onChange={(e) => setPriceBs(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="col-span-1">
+                <label htmlFor="prod-price-mayor" className="block text-sm font-medium text-gray-700 mb-1">Precio x Mayor</label>
+                <input
+                  id="prod-price-mayor"
+                  type="number"
+                  step="0.01"
+                  required={categoryType !== 'Perfumes'}
+                  value={wholesalePrice}
+                  onChange={(e) => setWholesalePrice(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+            </>
+          )}
+
+          <div className={`col-span-1 ${categoryType === 'Perfumes' ? 'sm:col-span-1 lg:col-span-3' : ''}`}>
+            <label htmlFor="prod-price-unidad" className="block text-sm font-medium text-gray-700 mb-1">Precio Unidad (Venta al Público)</label>
+            <input
+              id="prod-price-unidad"
+              type="number"
+              step="0.01"
+              required
+              value={sellingPrice}
+              onChange={(e) => setSellingPrice(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-teal-300 bg-teal-50 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+        </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+        <div className="text-sm">
+          {isAdmin && (
+            <>
+              {categoryType !== 'Perfumes' && (
+                <>
+                  <span className="text-gray-500">Costo Total del Lote: </span>
+                  <span className="text-lg font-bold text-gray-900">Bs. {currentTotal}</span>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          {onCancelEdit && (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <X className="w-4 h-4" /> Cancelar
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="px-6 py-2 rounded-lg font-medium transition-colors text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting
+              ? (editingProduct ? 'Actualizando...' : 'Guardando...')
+              : (editingProduct ? 'Actualizar Producto' : 'Guardar Producto')}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
