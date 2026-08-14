@@ -21,12 +21,12 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BGIRLS_212EB }}
 
       - name: Deploy to Firebase Hosting (Ignoring double-release bug)
         run: |
           set +e
-          npx firebase-tools deploy --only hosting --project pieldivina-8e167 --non-interactive > deploy_log.txt 2>&1
+          npx firebase-tools deploy --only hosting --project bgirls-212eb --non-interactive > deploy_log.txt 2>&1
           EXIT_CODE=$?
           cat deploy_log.txt
           if [ $EXIT_CODE -ne 0 ]; then
