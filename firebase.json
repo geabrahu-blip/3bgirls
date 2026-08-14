@@ -1,17 +1,11 @@
 {
   "hosting": {
-    "site": "pieldivina-8e167",
+    "site": "bgirls-212eb",
     "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
     ]
   }
 }

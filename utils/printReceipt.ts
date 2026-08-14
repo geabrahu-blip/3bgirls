@@ -16,7 +16,7 @@ export const printReceipt = (saleData: PrintSaleData) => {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Recibo Piel Divina</title>
+        <title>Recibo 3BGIRLS</title>
         <style>
           @page { size: 80mm auto; margin: 0; }
           body {
@@ -41,7 +41,7 @@ export const printReceipt = (saleData: PrintSaleData) => {
       </head>
       <body>
         <div class="receipt">
-          <div class="center bold" style="font-size: 14px;">PIEL DIVINA LG</div>
+          <div class="center bold" style="font-size: 14px;">3BGIRLS LG</div>
           <div class="center">El Centro de Tu Belleza</div>
         <div class="center">${(saleData.date || new Date()).toLocaleString('es-BO', {
           day: '2-digit',

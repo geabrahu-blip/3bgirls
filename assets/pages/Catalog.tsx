@@ -194,7 +194,7 @@ const Catalog = () => {
               <img src="/logo.png" alt="Logo" className="h-12 w-12 rounded-full object-cover border-2 border-[#D4AF37] shadow-[0_0_15px_rgba(212,175,55,0.4)]" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               <div>
                 <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-400 tracking-tight">
-                  Piel Divina
+                  3BGIRLS
                 </h1>
                 <p className="text-xs md:text-sm text-[#D4AF37] font-medium tracking-widest uppercase mt-0.5">
                   Catálogo Exclusivo

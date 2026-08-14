@@ -7,12 +7,12 @@ import { getStorage } from "firebase/storage";
 // Fallback to hardcoded values to prevent white screen in deployments
 // without environment variables configured. Firebase config for the web is safe to be public.
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAfyVb2Ib9llKot1iAckcOLfedv5nCJcmY",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "pieldivina-8e167.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "pieldivina-8e167",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "pieldivina-8e167.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "414757799407",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:414757799407:web:59c41b8504469176ea221a"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyA8WRAwvgr2IPcntbUOo-3BSjxqkGKd_V4",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "bgirls-212eb.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "bgirls-212eb",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "bgirls-212eb.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "57939816381",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:57939816381:web:eadb5d327285ce6b786cd4"
 };
 
 // Initialize Firebase

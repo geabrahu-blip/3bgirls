@@ -27,9 +27,9 @@ export default function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
-              <img src="/logo_piel_divina.jpeg" alt="Logo Piel Divina" className="h-10 w-10 rounded-full object-cover shadow-sm border border-teal-100" />
+              <img src="/logo_piel_divina.jpeg" alt="Logo 3BGIRLS" className="h-10 w-10 rounded-full object-cover shadow-sm border border-teal-100" />
               <Link to="/" className="text-xl font-bold text-gray-900">
-                Piel Divina
+                3BGIRLS
               </Link>
             </div>
 
