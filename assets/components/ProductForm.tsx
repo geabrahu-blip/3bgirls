@@ -137,9 +137,12 @@ export default function ProductForm({ onAdd, editingProduct, onCancelEdit }: Pro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || priceBs === '' || units === '' || wholesalePrice === '' || sellingPrice === '') return;
+    if (!name || units === '' || sellingPrice === '') return;
 
-    const totalPrice = Number(priceBs) * Number(units);
+    const finalPriceBs = priceBs === '' ? 0 : Number(priceBs);
+    const finalWholesalePrice = wholesalePrice === '' ? 0 : Number(wholesalePrice);
+
+    const totalPrice = finalPriceBs * Number(units);
 
     // We await onAdd here so if there's an error we don't clear the form
     await onAdd({
@@ -151,9 +154,9 @@ export default function ProductForm({ onAdd, editingProduct, onCancelEdit }: Pro
       expirationDate,
       barcode,
       image,
-      priceBs: Number(priceBs),
+      priceBs: finalPriceBs,
       units: Number(units),
-      wholesalePrice: Number(wholesalePrice),
+      wholesalePrice: finalWholesalePrice,
       sellingPrice: Number(sellingPrice),
       totalPrice,
     }, updatePricesAllStores);
@@ -358,12 +361,11 @@ export default function ProductForm({ onAdd, editingProduct, onCancelEdit }: Pro
           </div>
 
           <div className="col-span-1">
-            <label htmlFor="prod-price-bs" className="block text-sm font-medium text-gray-700 mb-1">Precio Compra (Bs)</label>
+            <label htmlFor="prod-price-bs" className="block text-sm font-medium text-gray-700 mb-1">Precio Compra (Bs) (Opcional)</label>
             <input
               id="prod-price-bs"
               type="number"
               step="0.01"
-              required
               value={priceBs}
               onChange={(e) => setPriceBs(Number(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -371,12 +373,11 @@ export default function ProductForm({ onAdd, editingProduct, onCancelEdit }: Pro
           </div>
 
           <div className="col-span-1">
-            <label htmlFor="prod-price-mayor" className="block text-sm font-medium text-gray-700 mb-1">Precio x Mayor</label>
+            <label htmlFor="prod-price-mayor" className="block text-sm font-medium text-gray-700 mb-1">Precio x Mayor (Opcional)</label>
             <input
               id="prod-price-mayor"
               type="number"
               step="0.01"
-              required
               value={wholesalePrice}
               onChange={(e) => setWholesalePrice(Number(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
