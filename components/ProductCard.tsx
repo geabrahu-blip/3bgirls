@@ -65,7 +65,7 @@ export const ProductCard = memo(({ product, cartQuantity, onAddToCart }: Product
         </div>
 
         <div className="mt-auto flex items-end justify-between">
-          <span className="text-base font-semibold text-slate-900">Bs. {product.sellingPrice}</span>
+          <span className="text-base font-semibold text-slate-900">Bs. {Number(product.sellingPrice) || 0}</span>
         </div>
       </div>
     </div>
