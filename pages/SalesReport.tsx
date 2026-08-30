@@ -6,11 +6,12 @@ import { useToast } from '../context/ToastContext';
 import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
 import { getLocalDateString } from '../utils/dateUtils';
+import { parseAmount } from '../utils/numberUtils';
 
 const SalesReport = () => {
   const { showToast } = useToast();
   const { isAdmin } = useAuth();
-  const [sales, setSales] = useState<Sale[]>([]);
+  // const [sales, setSales] = useState<Sale[]>([]);
   const [filteredSales, setFilteredSales] = useState<Sale[]>([]);
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -22,7 +23,7 @@ const SalesReport = () => {
   const loadData = useCallback(async () => {
     try {
       const salesData = await getSales(filterDate || undefined);
-      setSales(salesData);
+      // setSales(salesData);
       setFilteredSales(salesData); // We no longer need applyFilters since the query is already filtered
     } catch (error) {
       console.error('Error loading sales:', error);
@@ -56,17 +57,17 @@ const SalesReport = () => {
     }
   };
 
-  const totalSalesAmount = filteredSales.reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
+  const totalSalesAmount = filteredSales.reduce((sum, sale) => sum + (parseAmount(sale.total)), 0);
 
   const totalCashSales = filteredSales.reduce((sum, sale) => {
-    if (sale.paymentMethod === 'Cash') return sum + (Number(sale.total) || 0);
-    if (sale.paymentMethod === 'Mixto' && sale.amountCash) return sum + (Number(sale.amountCash) || 0);
+    if (sale.paymentMethod === 'Cash') return sum + (parseAmount(sale.total));
+    if (sale.paymentMethod === 'Mixto' && sale.amountCash) return sum + (parseAmount(sale.amountCash));
     return sum;
   }, 0);
 
   const totalQRSales = filteredSales.reduce((sum, sale) => {
-    if (sale.paymentMethod === 'QR') return sum + (Number(sale.total) || 0);
-    if (sale.paymentMethod === 'Mixto' && sale.amountQR) return sum + (Number(sale.amountQR) || 0);
+    if (sale.paymentMethod === 'QR') return sum + (parseAmount(sale.total));
+    if (sale.paymentMethod === 'Mixto' && sale.amountQR) return sum + (parseAmount(sale.amountQR));
     return sum;
   }, 0);
 
@@ -201,7 +202,7 @@ const SalesReport = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right font-bold text-teal-600">
-                    Bs. {(Number(sale.total) || 0).toFixed(2)}
+                    Bs. {(parseAmount(sale.total)).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button

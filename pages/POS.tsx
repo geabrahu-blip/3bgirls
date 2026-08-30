@@ -6,8 +6,9 @@ import { useAuth } from '../context/AuthContext';
 import { processPOSSale } from '../services/db';
 import { InventoryItem } from '../types';
 import { Search, ShoppingCart, Plus, Minus, CreditCard, Banknote, Sparkles, Trash2, Loader2 } from 'lucide-react';
-import { printReceipt } from '../utils/printReceipt';
+// import { printReceipt } from '../utils/printReceipt';
 import { ProductCard } from '../components/ProductCard';
+import { parseAmount } from '../utils/numberUtils';
 
 interface CartItem {
   product: InventoryItem;
@@ -74,11 +75,11 @@ const POS = () => {
   }, [cart]);
 
   const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + ((Number(item.product.sellingPrice) || 0) * item.quantity), 0);
+    return cart.reduce((sum, item) => sum + ((parseAmount(item.product.sellingPrice)) * item.quantity), 0);
   }, [cart]);
 
   const total = useMemo(() => {
-    const discountAmount = Number(globalDiscount) || 0;
+    const discountAmount = parseAmount(globalDiscount);
     return Math.max(0, subtotal - discountAmount);
   }, [subtotal, globalDiscount]);
 
@@ -131,8 +132,8 @@ const POS = () => {
     }
 
     if (paymentMethod === 'Mixto') {
-      const qrAmt = Number(mixedAmountQR) || 0;
-      const cashAmt = Number(mixedAmountCash) || 0;
+      const qrAmt = parseAmount(mixedAmountQR);
+      const cashAmt = parseAmount(mixedAmountCash);
       if (qrAmt + cashAmt !== total) {
         showToast('La suma de los montos debe ser igual al total a pagar', 'error');
         return;
@@ -145,8 +146,8 @@ const POS = () => {
         productId: item.product.id,
         name: item.product.name,
         quantity: item.quantity,
-        price: Number(item.product.sellingPrice) || 0,
-        subtotal: (Number(item.product.sellingPrice) || 0) * item.quantity
+        price: parseAmount(item.product.sellingPrice),
+        subtotal: (parseAmount(item.product.sellingPrice)) * item.quantity
       }));
 
       await processPOSSale(
@@ -154,12 +155,12 @@ const POS = () => {
         saleItems,
         subtotal,
         total,
-        Number(globalDiscount) || 0,
+        parseAmount(globalDiscount),
         paymentMethod,
         user?.id,
         user?.name,
-        paymentMethod === 'Mixto' ? Number(mixedAmountCash) || 0 : undefined,
-        paymentMethod === 'Mixto' ? Number(mixedAmountQR) || 0 : undefined
+        paymentMethod === 'Mixto' ? parseAmount(mixedAmountCash) : undefined,
+        paymentMethod === 'Mixto' ? parseAmount(mixedAmountQR) : undefined
       );
 
       showToast('Venta procesada exitosamente', 'success');
@@ -170,15 +171,15 @@ const POS = () => {
         items: cart.map(item => ({
           name: item.product.name,
           quantity: item.quantity,
-          price: Number(item.product.sellingPrice) || 0
+          price: parseAmount(item.product.sellingPrice)
         })),
         subtotal,
-        discount: Number(globalDiscount) || 0,
+        discount: parseAmount(globalDiscount),
         total,
         date: new Date(),
         paymentMethod,
-        amountCash: paymentMethod === 'Mixto' ? Number(mixedAmountCash) || 0 : undefined,
-        amountQR: paymentMethod === 'Mixto' ? Number(mixedAmountQR) || 0 : undefined
+        amountCash: paymentMethod === 'Mixto' ? parseAmount(mixedAmountCash) : undefined,
+        amountQR: paymentMethod === 'Mixto' ? parseAmount(mixedAmountQR) : undefined
       });
       */
 
@@ -325,7 +326,7 @@ const POS = () => {
               <div key={item.product.id} className="flex flex-row items-center bg-white border border-slate-100 p-3 rounded-2xl shadow-sm hover:border-slate-200 transition-colors gap-3">
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-medium text-slate-800 leading-snug line-clamp-2">{item.product.name}</h4>
-                  <div className="text-[11px] text-slate-500 font-medium mt-0.5">Bs. {Number(item.product.sellingPrice) || 0} c/u</div>
+                  <div className="text-[11px] text-slate-500 font-medium mt-0.5">Bs. {parseAmount(item.product.sellingPrice)} c/u</div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
@@ -347,7 +348,7 @@ const POS = () => {
                   </div>
 
                   <div className="text-right w-16">
-                    <div className="text-sm font-bold text-slate-900">Bs. {item.quantity * (Number(item.product.sellingPrice) || 0)}</div>
+                    <div className="text-sm font-bold text-slate-900">Bs. {item.quantity * (parseAmount(item.product.sellingPrice))}</div>
                   </div>
 
                   <button onClick={() => removeFromCart(item.product.id)} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">
