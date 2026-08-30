@@ -164,7 +164,8 @@ const POS = () => {
 
       showToast('Venta procesada exitosamente', 'success');
 
-      // IMPRESIÓN CON IFRAME OCULTO
+      // IMPRESIÓN CON IFRAME OCULTO (Deshabilitado para optimizar rendimiento en celulares de gama baja)
+      /*
       printReceipt({
         items: cart.map(item => ({
           name: item.product.name,
@@ -179,6 +180,7 @@ const POS = () => {
         amountCash: paymentMethod === 'Mixto' ? Number(mixedAmountCash) || 0 : undefined,
         amountQR: paymentMethod === 'Mixto' ? Number(mixedAmountQR) || 0 : undefined
       });
+      */
 
       // Reset POS state
       setCart([]);
