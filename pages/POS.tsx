@@ -74,7 +74,7 @@ const POS = () => {
   }, [cart]);
 
   const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + (item.product.sellingPrice * item.quantity), 0);
+    return cart.reduce((sum, item) => sum + ((Number(item.product.sellingPrice) || 0) * item.quantity), 0);
   }, [cart]);
 
   const total = useMemo(() => {
@@ -145,8 +145,8 @@ const POS = () => {
         productId: item.product.id,
         name: item.product.name,
         quantity: item.quantity,
-        price: item.product.sellingPrice,
-        subtotal: item.product.sellingPrice * item.quantity
+        price: Number(item.product.sellingPrice) || 0,
+        subtotal: (Number(item.product.sellingPrice) || 0) * item.quantity
       }));
 
       await processPOSSale(
@@ -169,7 +169,7 @@ const POS = () => {
         items: cart.map(item => ({
           name: item.product.name,
           quantity: item.quantity,
-          price: item.product.sellingPrice
+          price: Number(item.product.sellingPrice) || 0
         })),
         subtotal,
         discount: Number(globalDiscount) || 0,
@@ -323,7 +323,7 @@ const POS = () => {
               <div key={item.product.id} className="flex flex-row items-center bg-white border border-slate-100 p-3 rounded-2xl shadow-sm hover:border-slate-200 transition-colors gap-3">
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-medium text-slate-800 leading-snug line-clamp-2">{item.product.name}</h4>
-                  <div className="text-[11px] text-slate-500 font-medium mt-0.5">Bs. {item.product.sellingPrice} c/u</div>
+                  <div className="text-[11px] text-slate-500 font-medium mt-0.5">Bs. {Number(item.product.sellingPrice) || 0} c/u</div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
@@ -345,7 +345,7 @@ const POS = () => {
                   </div>
 
                   <div className="text-right w-16">
-                    <div className="text-sm font-bold text-slate-900">Bs. {item.quantity * item.product.sellingPrice}</div>
+                    <div className="text-sm font-bold text-slate-900">Bs. {item.quantity * (Number(item.product.sellingPrice) || 0)}</div>
                   </div>
 
                   <button onClick={() => removeFromCart(item.product.id)} className="text-red-400 hover:text-red-600 transition-colors p-1.5 hover:bg-red-50 rounded-lg">

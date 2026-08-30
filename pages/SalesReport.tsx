@@ -56,17 +56,17 @@ const SalesReport = () => {
     }
   };
 
-  const totalSalesAmount = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
+  const totalSalesAmount = filteredSales.reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
 
   const totalCashSales = filteredSales.reduce((sum, sale) => {
-    if (sale.paymentMethod === 'Cash') return sum + sale.total;
-    if (sale.paymentMethod === 'Mixto' && sale.amountCash) return sum + sale.amountCash;
+    if (sale.paymentMethod === 'Cash') return sum + (Number(sale.total) || 0);
+    if (sale.paymentMethod === 'Mixto' && sale.amountCash) return sum + (Number(sale.amountCash) || 0);
     return sum;
   }, 0);
 
   const totalQRSales = filteredSales.reduce((sum, sale) => {
-    if (sale.paymentMethod === 'QR') return sum + sale.total;
-    if (sale.paymentMethod === 'Mixto' && sale.amountQR) return sum + sale.amountQR;
+    if (sale.paymentMethod === 'QR') return sum + (Number(sale.total) || 0);
+    if (sale.paymentMethod === 'Mixto' && sale.amountQR) return sum + (Number(sale.amountQR) || 0);
     return sum;
   }, 0);
 
@@ -201,7 +201,7 @@ const SalesReport = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right font-bold text-teal-600">
-                    Bs. {(sale.total || 0).toFixed(2)}
+                    Bs. {(Number(sale.total) || 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button
