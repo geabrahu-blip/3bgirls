@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { InventoryItem } from '../types';
-import { getInventoryItems, searchInventoryItems } from '../services/db';
+import { getPaginatedInventoryItems, searchInventoryItems } from '../services/db';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 interface InventoryContextType {
@@ -28,7 +28,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const response = await getInventoryItems(null, 50);
+      const response = await getPaginatedInventoryItems(null, 50);
       setInventory(response.items);
       setLastDoc(response.lastDoc);
       setHasMore(response.lastDoc !== null);
@@ -52,7 +52,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
     setIsFetchingMore(true);
     try {
-      const response = await getInventoryItems(lastDoc, 50);
+      const response = await getPaginatedInventoryItems(lastDoc, 50);
 
       setInventory(prev => {
         // Filter out duplicates just in case

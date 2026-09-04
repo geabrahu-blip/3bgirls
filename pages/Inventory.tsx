@@ -12,10 +12,17 @@ import ConfirmModal from '../components/ConfirmModal';
 const Inventory = () => {
   const { isAdmin } = useAuth();
   const { showToast } = useToast();
-  const { updateLocalInventoryItem, removeLocalInventoryItem } = useInventory();
-
-  const [allProducts, setAllProducts] = useState<InventoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    inventory,
+    isLoading,
+    isFetchingMore,
+    hasMore,
+    refreshInventory,
+    loadMoreInventory,
+    searchInventory,
+    updateLocalInventoryItem,
+    removeLocalInventoryItem
+  } = useInventory();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -37,29 +44,13 @@ const Inventory = () => {
   const [adjustDate, setAdjustDate] = useState(new Date().toISOString().split('T')[0]);
   const [adjustReason, setAdjustReason] = useState('');
 
-
-
-
-  const fetchInventory = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const items = await getInventoryItems();
-
-      // Sort alphabetically by name
-      items.sort((a, b) => a.name.localeCompare(b.name));
-
-      setAllProducts(items);
-    } catch (error) {
-      console.error("Error loading inventory:", error);
-      showToast("Error al cargar el inventario", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [showToast]);
-
-  useEffect(() => { fetchInventory(); }, [fetchInventory]);
-
-  const refreshInventoryLocal = () => fetchInventory();
+  // Handle debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      searchInventory(inputValue);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
 
 
   // Safe default to prevent length/map crashes on completely undefined inventory
@@ -97,7 +88,6 @@ const Inventory = () => {
         units: selectedAdjustItem.units + Number(adjustQuantity)
       };
       updateLocalInventoryItem(updatedItem);
-      setAllProducts(prev => prev.map(p => p.id === updatedItem.id ? updatedItem : p));
 
       setIsAdjustModalOpen(false);
       setSelectedAdjustItem(null);
@@ -125,7 +115,6 @@ const Inventory = () => {
       setIsEditModalOpen(false);
       setEditItem(null);
       updateLocalInventoryItem(updatedItem);
-      setAllProducts(prev => prev.map(p => p.id === updatedItem.id ? updatedItem : p));
       showToast('Producto actualizado con éxito', 'success');
     } catch (error) {
       console.error('Error updating product:', error);
@@ -161,7 +150,6 @@ const Inventory = () => {
     try {
       await deleteInventoryItem(itemToDelete);
       removeLocalInventoryItem(itemToDelete);
-      setAllProducts(prev => prev.filter(p => p.id !== itemToDelete));
       showToast('Registro eliminado del inventario', 'info');
     } catch (error) {
       console.error('Error deleting item:', error);
@@ -172,19 +160,11 @@ const Inventory = () => {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
-      </div>
-    );
-  }
-
   const safeToLower = (val: any) => (val ? String(val).toLowerCase() : '');
   const searchLower = safeToLower(inputValue);
 
-  // Filter products synchronously based on inputValue
-  const filteredProducts = allProducts.filter(p =>
+  // Filter products synchronously based on inputValue (adds client-side filtering on top of fetched search results)
+  const filteredProducts = inventory.filter(p =>
     safeToLower(p.name).includes(searchLower) ||
     safeToLower(p.barcode).includes(searchLower) ||
     safeToLower(p.brand).includes(searchLower) ||
@@ -254,8 +234,9 @@ const Inventory = () => {
             onCancelEdit={() => setIsAddProductOpen(false)}
             onAdd={async (product) => {
               try {
-                await addProduct(product as any); // Type assertion needed due to Product vs Omit<Product, 'id'> matching
-                await refreshInventoryLocal();
+                await addProduct(product as any);
+                await refreshInventory(); // Fast paginated refresh to get the new item with correct ID
+
                 showToast('Producto añadido al inventario exitosamente', 'success');
                 setIsAddProductOpen(false);
               } catch (e: any) {
@@ -288,7 +269,11 @@ const Inventory = () => {
 
       {/* Desktop Table View */}
       <div className="hidden md:block bg-white rounded-lg shadow h-[calc(100vh-250px)]">
-        {filteredProducts.length === 0 ? (
+        {isLoading && filteredProducts.length === 0 ? (
+          <div className="flex justify-center items-center h-full">
+            <Loader2 className="animate-spin text-teal-600 w-8 h-8" />
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="flex justify-center items-center h-full text-gray-500">
             No se encontraron productos en el inventario.
           </div>
@@ -296,6 +281,11 @@ const Inventory = () => {
           <TableVirtuoso
             style={{ height: '100%' }}
             data={filteredProducts}
+            endReached={() => {
+              if (hasMore && !isFetchingMore) {
+                loadMoreInventory();
+              }
+            }}
             computeItemKey={(index, item) => item.id}
             components={{
               Table: ({ style, ...props }) => (
@@ -316,6 +306,18 @@ const Inventory = () => {
               TableBody: React.forwardRef((props, ref) => (
                 <tbody {...props} ref={ref} className="divide-y divide-gray-200" />
               )),
+              TableFoot: React.forwardRef((props, ref) => {
+                if (!hasMore && !isFetchingMore) return null;
+                return (
+                  <tfoot {...props} ref={ref}>
+                    <tr>
+                      <td colSpan={4} className="py-4 text-center">
+                        {isFetchingMore ? <Loader2 className="w-5 h-5 text-teal-600 animate-spin mx-auto" /> : 'Cargar más...'}
+                      </td>
+                    </tr>
+                  </tfoot>
+                );
+              }),
             }}
             fixedHeaderContent={() => (
               <tr>
@@ -394,7 +396,11 @@ const Inventory = () => {
 
       {/* Mobile Grid View */}
       <div className="md:hidden">
-        {filteredProducts.length === 0 ? (
+        {isLoading && filteredProducts.length === 0 ? (
+          <div className="flex justify-center items-center py-12">
+            <Loader2 className="animate-spin text-teal-600 w-8 h-8" />
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center text-gray-500">
             No se encontraron productos en el inventario.
           </div>
@@ -402,7 +408,22 @@ const Inventory = () => {
           <Virtuoso
             useWindowScroll
             data={filteredProducts}
+            endReached={() => {
+              if (hasMore && !isFetchingMore) {
+                loadMoreInventory();
+              }
+            }}
             computeItemKey={(index, product) => product.id}
+            components={{
+              Footer: () => {
+                if (!hasMore && !isFetchingMore) return null;
+                return (
+                  <div className="py-4 flex justify-center">
+                    {isFetchingMore ? <Loader2 className="w-5 h-5 text-teal-600 animate-spin" /> : <span className="text-gray-500">Cargar más...</span>}
+                  </div>
+                );
+              }
+            }}
             itemContent={(_, product) => {
               let bgClass = "bg-white";
               if (product.units === 0) bgClass = "bg-red-50";

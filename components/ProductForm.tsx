@@ -10,7 +10,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { storage } from '../services/firebase';
 
 interface ProductFormProps {
-  onAdd: (product: Omit<Product, 'id'>) => void;
+  onAdd: (product: Omit<Product, 'id'>) => Promise<void> | void;
   editingProduct?: Product;
   onCancelEdit?: () => void;
 }
