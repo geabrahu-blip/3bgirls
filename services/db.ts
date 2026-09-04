@@ -677,7 +677,12 @@ export const getSales = async (dateStr?: string): Promise<Sale[]> => {
       where('date', '<=', endDate.toISOString())
     );
   } else {
-    q = query(collection(db, 'sales'));
+    // Fetch last 100 sales globally to prevent crashing the app with massive payloads
+    q = query(
+      collection(db, 'sales'),
+      orderBy('date', 'desc'),
+      limit(100)
+    );
   }
 
   const querySnapshot = await getDocs(q);
