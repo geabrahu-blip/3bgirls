@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { VirtuosoGrid } from 'react-virtuoso';
-import { getInventoryItems } from '../services/db';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { processPOSSale } from '../services/db';
@@ -9,6 +8,7 @@ import { Search, ShoppingCart, Plus, Minus, CreditCard, Banknote, Sparkles, Tras
 // import { printReceipt } from '../utils/printReceipt';
 import { ProductCard } from '../components/ProductCard';
 import { parseAmount } from '../utils/numberUtils';
+import { useInventory } from '../context/InventoryContext';
 
 interface CartItem {
   product: InventoryItem;
@@ -16,33 +16,29 @@ interface CartItem {
 }
 
 const POS = () => {
-  const [products, setProducts] = useState<InventoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchInventory = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const items = await getInventoryItems();
-      setProducts(items);
-    } catch (error) {
-      console.error("Error loading inventory:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Wrap initial fetch in setTimeout to avoid React concurrent rendering issues
-    const timer = setTimeout(() => {
-      fetchInventory();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [fetchInventory]);
-
   const { showToast } = useToast();
   const { user } = useAuth();
 
+  const {
+    inventory: products,
+    isLoading,
+    isFetchingMore,
+    hasMore,
+    searchInventory,
+    loadMoreInventory,
+    updateMultipleLocalInventoryItems
+  } = useInventory();
+
   const [inputValue, setInputValue] = useState('');
+
+  // Handle debounced search for POS
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      searchInventory(inputValue);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [clientName, setClientName] = useState('');
 
@@ -53,10 +49,11 @@ const POS = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState<'catalog' | 'cart'>('catalog');
 
-  // Filter products for the catalog
+  // Filter products for the catalog - use products from context
   const filteredProducts = useMemo(() => {
     let filtered = products.filter(p => p.units > 0);
 
+    // Apply additional client-side filtering on top of fetched search results for snappiness
     if (inputValue.trim() !== '') {
       const searchTerm = inputValue.toLowerCase().trim();
       filtered = filtered.filter(p =>
@@ -192,8 +189,14 @@ const POS = () => {
       setMixedAmountCash('');
       setInputValue('');
 
-      // Refresh global inventory to reflect new stock
-      fetchInventory();
+      // Refresh local stock instantly without network request to make POS smooth and fluid
+      const modifiedItems = cart.map(item => {
+        return {
+          ...item.product,
+          units: item.product.units - item.quantity
+        };
+      });
+      updateMultipleLocalInventoryItems(modifiedItems);
 
     } catch (error) {
       console.error("Error processing sale:", error);
@@ -269,7 +272,11 @@ const POS = () => {
 
         {/* Product Grid */}
         <div className="flex-1 p-5 bg-slate-50/50 min-h-0 relative">
-          {filteredProducts.length === 0 ? (
+          {isLoading && filteredProducts.length === 0 ? (
+            <div className="h-full flex items-center justify-center absolute inset-0">
+              <Loader2 className="animate-spin text-teal-600 w-8 h-8" />
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-400 text-sm absolute inset-0">
               No se encontraron productos disponibles.
             </div>
@@ -278,8 +285,23 @@ const POS = () => {
               <VirtuosoGrid
                 style={{ height: '100%', width: '100%' }}
                 totalCount={filteredProducts.length}
+                endReached={() => {
+                  if (hasMore && !isFetchingMore) {
+                    loadMoreInventory();
+                  }
+                }}
                 listClassName="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-5 pb-10"
                 itemClassName="flex flex-col h-full"
+                components={{
+                  Footer: () => {
+                    if (!hasMore && !isFetchingMore) return null;
+                    return (
+                      <div className="py-8 flex justify-center col-span-full w-full">
+                        {isFetchingMore ? <Loader2 className="w-6 h-6 text-teal-600 animate-spin" /> : <span className="text-gray-500 font-medium">Cargando más productos...</span>}
+                      </div>
+                    );
+                  }
+                }}
                 itemContent={(index) => {
                   const product = filteredProducts[index];
                   const cartItem = cart.find(c => c.product.id === product.id);
